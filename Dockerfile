@@ -1,4 +1,5 @@
 # CO render image: Blender 5.2.1 LTS (pinned by sha256) + ffmpeg + sshd, nothing else. Public, no assets, no secrets.
+# 5.2.1-2 (2026-09-21): sshd config drop-in + foreground sshd with logging (start.sh); Blender unchanged.
 # Built by GitHub Actions in the co-render-image repo (see github-workflow-build.yml beside this file) and pushed to
 # ghcr.io/<owner>/co-blender:5.2.1-<n>. Never tagged `latest` (CC ruling 2026-09-19). Design: 03-PROJECTS/marketing/
 # blender-program/stage-a-design.md section 2.
@@ -28,6 +29,18 @@ RUN curl -sSL -A "Mozilla/5.0" --connect-timeout 15 --max-time 900 -o /tmp/blend
  && tar xJf /tmp/blender.tar.xz --strip-components=1 -C /opt/blender \
  && rm /tmp/blender.tar.xz \
  && /opt/blender/blender -b --version | head -1
+# sshd for a container behind Runpod's proxied port 22 (CC ruling 2026-09-21 after the 5.2.1-1 proof pod dropped an
+# 84 MB push): stock Ubuntu sshd marks packets af21/cs1 (OpenSSH >= 7.8) and some overlay paths reset large bulk
+# transfers on it; IPQoS cs0 cs0 is the known fix. Keepalives so a 30-minute render is never dropped as idle.
+RUN printf '%s\n' \
+      'PermitRootLogin prohibit-password' \
+      'UseDNS no' \
+      'TCPKeepAlive yes' \
+      'ClientAliveInterval 30' \
+      'ClientAliveCountMax 10' \
+      'MaxStartups 30' \
+      'IPQoS cs0 cs0' \
+      > /etc/ssh/sshd_config.d/co.conf
 COPY start.sh /start.sh
 RUN chmod 755 /start.sh
 EXPOSE 22
