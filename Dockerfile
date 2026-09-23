@@ -1,7 +1,7 @@
 # CO render image: Blender 5.2.1 LTS (pinned by sha256) + ffmpeg + sshd + COLMAP (CUDA) for dense photogrammetry.
 # Public, no assets, no secrets.
 # 5.2.1-2 (2026-09-21): sshd config drop-in + foreground sshd with logging (start.sh); Blender unchanged.
-# 5.2.1-3 (2026-09-22): COLMAP 4.2.0 CUDA build from conda-forge in its own prefix (/opt/conda/envs/recon), plus
+# 5.2.1-3/-4 (2026-09-22): COLMAP 4.2.0 CUDA build from conda-forge in its own prefix (/opt/conda/envs/recon), plus
 #   open3d-cpu + trimesh for mesh cleanup and .glb export (vertex colour and UV-textured); `colmap` and `recon-python`
 #   wrappers on PATH. Blender, ffmpeg, sshd unchanged.
 # Built by GitHub Actions in the co-render-image repo (see github-workflow-build.yml beside this file) and pushed to
@@ -43,13 +43,17 @@ RUN curl -sSL -A "Mozilla/5.0" --connect-timeout 15 --max-time 900 -o /tmp/blend
 ARG MICROMAMBA_URL=https://github.com/mamba-org/micromamba-releases/releases/download/2.9.0-0/micromamba-linux-64
 ARG MICROMAMBA_SHA=366cd9cd8be14df1ab8ed50352a82111082a36686b2d389fdb79a92c3fafb3e3
 ARG COLMAP_SPEC=colmap=4.2.0=cuda_129ha585b08_0
+# 5.2.1-3 failed at build: the solver paired that colmap build with an OpenImageIO whose soname is not libOpenImageIO.so.3.1,
+# so the binary could not load. Pin the library to the series the build links against and prove the file exists (5.2.1-4).
+ARG OIIO_SPEC="openimageio=3.1.*"
 ARG PIP_SPECS="open3d-cpu==0.19.0 trimesh==5.1.0 pillow==12.3.0"
 ENV MAMBA_ROOT_PREFIX=/opt/conda
 RUN curl -sSL --connect-timeout 15 --max-time 300 -o /usr/local/bin/micromamba "$MICROMAMBA_URL" \
  && echo "$MICROMAMBA_SHA  /usr/local/bin/micromamba" | sha256sum -c - \
  && chmod 755 /usr/local/bin/micromamba \
  && CONDA_OVERRIDE_CUDA=12.9 micromamba create -y -q -n recon -c conda-forge --override-channels \
-      "$COLMAP_SPEC" python=3.11 pip \
+      "$COLMAP_SPEC" "$OIIO_SPEC" python=3.11 pip \
+ && ls /opt/conda/envs/recon/lib/libOpenImageIO.so.3.1 \
  && /opt/conda/envs/recon/bin/pip install --no-cache-dir -q $PIP_SPECS \
  && micromamba clean -a -y -q \
  && printf '#!/bin/sh\nexport QT_QPA_PLATFORM=offscreen\nexec /opt/conda/envs/recon/bin/colmap "$@"\n' \
